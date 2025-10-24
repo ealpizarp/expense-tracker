@@ -1,0 +1,400 @@
+{
+  "name": "Expense Tracker",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -304,
+        0
+      ],
+      "id": "2d4203d9-e883-4582-a40f-8e400bcc142b",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "returnAll": true,
+        "simple": false,
+        "filters": {
+          "receivedAfter": "2025-10-03T00:00:00",
+          "sender": "notificacion@notificacionesbaccr.com"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        208,
+        0
+      ],
+      "id": "eab11fd5-327c-49e2-b2f8-424c35c1fdcf",
+      "name": "Get many messages",
+      "webhookId": "bd37dfb2-a2a4-4df0-aebd-fa413b73fa3a",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "ob9ZtAzjsywYbef8",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process all incoming items\n\nreturn $input.all().map(item => {\n  const html = item.json.html; // adjust if your field name differs\n\n  const comerce = html.match(/<p>\\s*Comercio:<\\/p>\\s*<\\/td>\\s*<td[^>]*>\\s*<p>\\s*([^<]+)/i)?.[1]?.trim();\n  const date = html.match(/<p>\\s*Fecha:<\\/p>\\s*<\\/td>\\s*<td[^>]*>\\s*<p>\\s*([^<]+)/i)?.[1]?.trim();\n  const location = html.match(/<p>\\s*Ciudad y pa&iacute;s:<\\/p>\\s*<\\/td>\\s*<td[^>]*>\\s*<p>\\s*([^<]+)/i)?.[1]?.trim().replace(',', '.');\n  const amount = html.match(/<p>\\s*Monto:<\\/p>\\s*<\\/td>\\s*<td[^>]*>\\s*<p>\\s*([^<]+)/i)?.[1]?.trim()?.replace(',', '.');\n\n  return {\n    json: {\n      comerce,\n      date,\n      amount,\n      location\n    }\n  };\n});\n\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        416,
+        0
+      ],
+      "id": "4d7c6899-c351-481d-860e-05ef8870b927",
+      "name": "Extract relevant information"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Merge all previous items into one array\nreturn [\n  {\n    json: {\n      expenses: $input.all().map(item => item.json)\n    }\n  }\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        624,
+        0
+      ],
+      "id": "de2441ab-5164-491c-8291-b5599cae4ea9",
+      "name": "Merge All Items"
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ $json.candidates[0].content.parts[0].text }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1232,
+        0
+      ],
+      "id": "6f272758-e39a-45b1-b575-797ed112139f",
+      "name": "Extract Output JSON"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-2.5-flash",
+          "mode": "list",
+          "cachedResultName": "models/gemini-2.5-flash"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=You will receive a JSON array with expense records from credit card notifications. Each record includes:  \n\n  •⁠  ⁠commerce: the merchant name  \n\n  •⁠  ⁠date: the transaction date  \n\n  •⁠  ⁠amount: the amount (may include CRC or USD)  \n\n  * location: the place where the purchase was made\n\n\n\n  Your task:  \n\n  1.⁠ ⁠Analyze the JSON input.  \n\n  2.⁠ ⁠Classify each expense into categories: Food, Groceries, Transportation, Entertainment, Services & Utilities, Shopping, Travel & Lodging, Other.  \n\n  3.⁠ ⁠Use the examples below as guidance:  \n\n     - Food : Starbucks, McDonald's, Burger King, Pizzería, Soda, Restaurante, Café Britt, Subway, KFC  \n\n     - Groceries: Walmart, Masxmenos, Auto Mercado, Fresh Market, Supermercado, PriceSmart, Perimercados  \n\n     - Transportation: Uber, Didi, Shell, Delta, Gas Station, Recope, Quick Lube, Riteve, Car Wash  \n\n     - Entertainment: Netflix, Spotify, Disney+, Cinemark, YouTube Premium, Twitch, Eventbrite, Bars, XStyle, La Cali, Jogo, Fira\n\n     - Services & Utilities: Claro, Kolbi, ICE, Tigo, Internet, Electricidad, Agua, Banco, Insurance  \n\n     - Shopping: Amazon, Shein, Aliexpress, Zara, H&M, Tienda, Boutique, Nike, Adidas, Electronics  \n\n     - Travel: Airbnb, Booking, Expedia, Hotel, Hertz, Aerolínea, Avianca, Copa, American Airlines  \n\n     - Other: Anything not clearly fitting in the above.  \n\n  4.⁠ ⁠Identify currency and normalize values (CRC / USD) with 1 USD = 510 CRC. \n\n  5. format \"fecha\" to a standard timestamp\n\n  6.⁠ ⁠Calculate totals per category and grand summary.  \n\n  7.⁠ ⁠Return result as valid JSON in the structure below:  \n\n  {  \n\n    \"categories\": [  \n\n      {  \n\n        \"name\": \"Food \",  \n\n        \"total_CRC\": 0,  \n\n        \"total_USD\": 0,  \n\n        \"transactions\": [  \n\n          { \"commerce\": \"\", \"date\": \"\", \"amount\": \"\", \"location\" : \"\"}  \n\n        ]  \n\n      }  \n\n    ],  \n\n    \"summary\": {  \n\n      \"total_CRC\": 0,  \n\n      \"total_USD\": 0,  \n\n      \"total_CRC_equivalent\": 0  \n\n    }  \n\n  }",
+              "role": "model"
+            },
+            {
+              "content": "={{ JSON.stringify($json.expenses) }}"
+            }
+          ]
+        },
+        "simplify": false,
+        "jsonOutput": true,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1,
+      "position": [
+        864,
+        0
+      ],
+      "id": "051be50e-6f26-4775-a832-3c4da015ecd0",
+      "name": "Categorize expenses using Gemini",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "FDs2tKRg9ytozSQS",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT IGNORE INTO `categories` (`category_name`) VALUES ($1);",
+        "options": {
+          "queryReplacement": "={{ $json.name }}"
+        }
+      },
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.5,
+      "position": [
+        1888,
+        0
+      ],
+      "id": "a1aed04f-9466-41bd-a0b7-6740b0b0a3ad",
+      "name": "Insert Categories",
+      "credentials": {
+        "mySql": {
+          "id": "2AtlI7KoMDWDhRWT",
+          "name": "MySQL account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "categories",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        1568,
+        0
+      ],
+      "id": "9d19eaad-2805-4ddb-bc28-55052b5b844e",
+      "name": "Get individual categories"
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "transactions",
+        "include": "allOtherFields",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        1888,
+        224
+      ],
+      "id": "4f1f23a6-72bf-4ee1-a800-db95c9a22480",
+      "name": "Get Individual Transactions"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT IGNORE INTO `merchants` (`merchant_name`) VALUES ($1);",
+        "options": {
+          "queryReplacement": "={{ $json.transactions.commerce }}"
+        }
+      },
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.5,
+      "position": [
+        2112,
+        224
+      ],
+      "id": "b584182b-ab39-4913-b7df-05081b117e71",
+      "name": "Insert Merchants",
+      "credentials": {
+        "mySql": {
+          "id": "2AtlI7KoMDWDhRWT",
+          "name": "MySQL account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO `transactions` \n(`transaction_date`, `amount`, `location`, `category_id`, `merchant_id`)\nSELECT\n  $1,\n  $2, \n  $3,\n   COALESCE((SELECT `category_id` FROM `categories` WHERE `category_name` = $4), 1),\n   COALESCE((SELECT `merchant_id` FROM `merchants` WHERE `merchant_name` = $5), 1);",
+        "options": {
+          "queryReplacement": "={{ $json.transactions.date }}, {{ $json.transactions.amount }}, {{ $json.transactions.location }}, {{ $json.name }}, {{ $json.transactions.commerce }}"
+        }
+      },
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.5,
+      "position": [
+        2112,
+        432
+      ],
+      "id": "4f31ee80-15bf-4e0e-acc4-9f957e30dac3",
+      "name": "Insert Transactions",
+      "credentials": {
+        "mySql": {
+          "id": "2AtlI7KoMDWDhRWT",
+          "name": "MySQL account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "TRUNCATE `expenses`.`transactions`;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.5,
+      "position": [
+        -32,
+        0
+      ],
+      "id": "b28cdfdd-bcf5-4927-9a37-c1e68af8f144",
+      "name": "Delete Existing Data",
+      "credentials": {
+        "mySql": {
+          "id": "2AtlI7KoMDWDhRWT",
+          "name": "MySQL account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "transactions",
+        "include": "allOtherFields",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        1888,
+        432
+      ],
+      "id": "dc1a41fa-478e-405a-a469-9565826611b0",
+      "name": "Get Transactions"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Delete Existing Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get many messages": {
+      "main": [
+        [
+          {
+            "node": "Extract relevant information",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract relevant information": {
+      "main": [
+        [
+          {
+            "node": "Merge All Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge All Items": {
+      "main": [
+        [
+          {
+            "node": "Categorize expenses using Gemini",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Output JSON": {
+      "main": [
+        [
+          {
+            "node": "Get individual categories",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Categorize expenses using Gemini": {
+      "main": [
+        [
+          {
+            "node": "Extract Output JSON",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert Categories": {
+      "main": [
+        []
+      ]
+    },
+    "Get individual categories": {
+      "main": [
+        [
+          {
+            "node": "Insert Categories",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get Individual Transactions",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get Transactions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Individual Transactions": {
+      "main": [
+        [
+          {
+            "node": "Insert Merchants",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert Merchants": {
+      "main": [
+        []
+      ]
+    },
+    "Delete Existing Data": {
+      "main": [
+        [
+          {
+            "node": "Get many messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Transactions": {
+      "main": [
+        [
+          {
+            "node": "Insert Transactions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "15c9c94e-d045-461a-bdfc-923f2a95db2d",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "68cc57e370e95934796ced9470a43c35803a3e443c4cb58db8b7425f9d0db385"
+  },
+  "id": "9q2kpaOz32kLHmlQ",
+  "tags": []
+}

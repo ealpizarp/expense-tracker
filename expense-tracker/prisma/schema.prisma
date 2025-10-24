@@ -1,0 +1,97 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model Merchant {
+  merchantId   Int           @id @default(autoincrement()) @map("merchant_id")
+  merchantName String        @unique @map("merchant_name")
+  transactions Transaction[]
+
+  @@map("merchants")
+}
+
+model Category {
+  categoryId   Int           @id @default(autoincrement()) @map("category_id")
+  categoryName String        @unique @map("category_name")
+  transactions Transaction[]
+
+  @@map("categories")
+}
+
+model Transaction {
+  transactionId   Int       @id @default(autoincrement()) @map("transaction_id")
+  merchantId      Int       @map("merchant_id")
+  location        String
+  categoryId      Int?      @map("category_id")
+  amount          String
+  currency        String
+  transactionDate DateTime  @map("transaction_date")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  userId          String?   @map("user_id") @db.VarChar(255)
+  category        Category? @relation(fields: [categoryId], references: [categoryId])
+  merchant        Merchant  @relation(fields: [merchantId], references: [merchantId])
+  // user            User?     @relation(fields: [userId], references: [id])
+
+  @@index([merchantId], map: "idx_transactions_merchant_id")
+  @@index([categoryId], map: "idx_transactions_category_id")
+  @@index([userId], map: "idx_transactions_user_id")
+  @@map("transactions")
+}
+
+model Account {
+  id                String  @id @default(cuid()) @db.VarChar(255)
+  userId            String  @map("user_id") @db.VarChar(255)
+  type              String  @db.VarChar(255)
+  provider          String  @db.VarChar(255)
+  providerAccountId String  @map("provider_account_id") @db.VarChar(255)
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String? @db.VarChar(255)
+  scope             String? @db.VarChar(255)
+  id_token          String? @db.Text
+  session_state     String? @db.VarChar(255)
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId], map: "accounts_user_id_fkey")
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid()) @db.VarChar(255)
+  sessionToken String   @unique @map("session_token") @db.VarChar(255)
+  userId       String   @map("user_id") @db.VarChar(255)
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId], map: "sessions_user_id_fkey")
+  @@map("sessions")
+}
+
+model User {
+  id            String    @id @default(cuid()) @db.VarChar(255)
+  name          String?   @db.VarChar(255)
+  email         String?   @unique @db.VarChar(255)
+  emailVerified DateTime? @map("email_verified")
+  image         String?   @db.VarChar(500)
+  accounts      Account[]
+  sessions      Session[]
+  // transactions  Transaction[]
+
+  @@map("users")
+}
+
+model VerificationToken {
+  identifier String   @db.VarChar(255)
+  token      String   @unique @db.VarChar(255)
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
